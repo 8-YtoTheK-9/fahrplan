@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wetter Vaduz</title>
+<style>
+  :root{
+    --text:#16242e;
+    --grau:#5d7180;
+    --linie:rgba(22,36,46,.12);
+    --sonne:#f5b731;
+    --wolke:#c4d0d8;
+    --wolke-dunkel:#94a6b2;
+    --regen:#4a90d9;
+    --schnee:#9fc6e3;
+    --blitz:#f2a03d;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;overflow:hidden}
+  body{
+    margin:0;
+    padding:clamp(10px,2.4vh,18px) clamp(12px,2.4vw,20px);
+    font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;
+    color:var(--text);
+    display:flex;
+    flex-direction:column;
+    background:linear-gradient(160deg,#eaf2f8 0%,#f7fafc 55%,#ffffff 100%);
+    transition:background .6s ease;
+  }
+  body.klar{background:linear-gradient(160deg,#ddeefc 0%,#fdf6e6 60%,#ffffff 100%)}
+  body.wolkig{background:linear-gradient(160deg,#e6ecf1 0%,#f5f8fa 60%,#ffffff 100%)}
+  body.nass{background:linear-gradient(160deg,#dde8f2 0%,#eef4f9 60%,#ffffff 100%)}
+  body.schnee{background:linear-gradient(160deg,#e8f1f7 0%,#f8fbfd 60%,#ffffff 100%)}
+
+  header{
+    display:flex;
+    align-items:baseline;
+    gap:8px;
+    flex:0 0 auto;
+  }
+  h1{
+    font-size:clamp(12px,2.8vh,15px);
+    margin:0;
+    font-weight:700;
+    letter-spacing:.04em;
+    text-transform:uppercase;
+    color:var(--grau);
+  }
+  .jetzt{
+    margin-left:auto;
+    font-size:clamp(10px,2.1vh,12px);
+    color:var(--grau);
+    white-space:nowrap;
+    font-variant-numeric:tabular-nums;
+  }
+
+  .aktuell{
+    display:flex;
+    align-items:center;
+    gap:clamp(10px,2.4vw,20px);
+    padding:clamp(4px,1.6vh,14px) 0;
+    flex:0 0 auto;
+  }
+  .aktuell svg{
+    width:clamp(42px,11vh,72px);
+    height:clamp(42px,11vh,72px);
+    flex:0 0 auto;
+  }
+  .grad{
+    font-size:clamp(26px,8vh,48px);
+    font-weight:300;
+    line-height:1;
+    letter-spacing:-.02em;
+    font-variant-numeric:tabular-nums;
+  }
+  .lage{font-size:clamp(12px,2.7vh,16px);line-height:1.45}
+  .lage span{display:block;color:var(--grau);font-size:.82em}
+
+  ul{
+    list-style:none;
+    margin:0;
+    padding:0;
+    flex:1 1 auto;
+    display:flex;
+    flex-direction:column;
+    justify-content:space-evenly;
+    min-height:0;
+    overflow:hidden;
+    border-top:1px solid var(--linie);
+  }
+  li{
+    display:flex;
+    align-items:center;
+    gap:clamp(6px,1.6vw,14px);
+    font-size:clamp(11px,2.5vh,14px);
+    padding:clamp(1px,.6vh,6px) 0;
+  }
+  li svg{width:clamp(18px,3.8vh,26px);height:clamp(18px,3.8vh,26px);flex:0 0 auto}
+  .tag{font-weight:700;min-width:3.4em}
+  .beschrieb{color:var(--grau);flex:1 1 auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .werte{white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--grau)}
+  .werte b{color:var(--text);font-weight:700}
+  .hinweis{font-size:clamp(11px,2.4vh,14px);color:var(--grau);padding:8px 0}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Vaduz</h1>
+  <span class="jetzt" id="jetzt"></span>
+</header>
+
+<div class="aktuell" id="aktuell" style="display:none">
+  <span id="ikone"></span>
+  <span class="grad" id="grad"></span>
+  <span class="lage" id="lage"></span>
+</div>
+
+<ul id="liste"></ul>
+<div class="hinweis" id="status">Wetterdaten werden geladen.</div>
+
+<script>
+(function(){
+  var BREITE = 47.141;
+  var LAENGE = 9.521;
+
+  var lagen = {
+    0:"klar", 1:"vorwiegend sonnig", 2:"teils bewölkt", 3:"bedeckt",
+    45:"Nebel", 48:"gefrierender Nebel",
+    51:"leichter Nieselregen", 53:"Nieselregen", 55:"starker Nieselregen",
+    56:"gefrierender Niesel", 57:"gefrierender Niesel",
+    61:"leichter Regen", 63:"Regen", 65:"starker Regen",
+    66:"gefrierender Regen", 67:"gefrierender Regen",
+    71:"leichter Schneefall", 73:"Schneefall", 75:"starker Schneefall",
+    77:"Schneegriesel",
+    80:"Regenschauer", 81:"Regenschauer", 82:"kräftige Schauer",
+    85:"Schneeschauer", 86:"Schneeschauer",
+    95:"Gewitter", 96:"Gewitter mit Hagel", 99:"Gewitter mit Hagel"
+  };
+  var wochentage = ["So","Mo","Di","Mi","Do","Fr","Sa"];
+
+  function gruppe(code){
+    if(code === 0 || code === 1) return "klar";
+    if(code === 2 || code === 3) return "wolkig";
+    if(code === 45 || code === 48) return "nebel";
+    if(code >= 95) return "gewitter";
+    if((code >= 71 && code <= 77) || code === 85 || code === 86) return "schnee";
+    if(code >= 51) return "regen";
+    return "wolkig";
+  }
+
+  // Bausteine fuer die Piktogramme
+  var sonne = '<circle cx="22" cy="21" r="9" fill="var(--sonne)"/>'
+    + '<g stroke="var(--sonne)" stroke-width="2.6" stroke-linecap="round">'
+    + '<line x1="22" y1="4" x2="22" y2="9"/><line x1="22" y1="33" x2="22" y2="38"/>'
+    + '<line x1="5" y1="21" x2="10" y2="21"/><line x1="34" y1="21" x2="39" y2="21"/>'
+    + '<line x1="10" y1="9" x2="13.5" y2="12.5"/><line x1="30.5" y1="29.5" x2="34" y2="33"/>'
+    + '<line x1="10" y1="33" x2="13.5" y2="29.5"/><line x1="30.5" y1="12.5" x2="34" y2="9"/></g>';
+  var sonneKlein = '<circle cx="28" cy="16" r="8" fill="var(--sonne)"/>'
+    + '<g stroke="var(--sonne)" stroke-width="2.4" stroke-linecap="round">'
+    + '<line x1="28" y1="2" x2="28" y2="5"/><line x1="40" y1="16" x2="43" y2="16"/>'
+    + '<line x1="37" y1="7" x2="39" y2="5"/><line x1="37" y1="25" x2="39" y2="27"/></g>';
+  function wolke(farbe){
+    return '<path d="M17 42h18a10 10 0 0 0 1.2-19.9A14 14 0 0 0 9.6 26 9 9 0 0 0 11 42z" fill="' + farbe + '"/>';
+  }
+  var tropfen = '<g stroke="var(--regen)" stroke-width="3" stroke-linecap="round">'
+    + '<line x1="17" y1="47" x2="14" y2="55"/><line x1="26" y1="47" x2="23" y2="55"/>'
+    + '<line x1="35" y1="47" x2="32" y2="55"/></g>';
+  var flocken = '<g fill="var(--schnee)">'
+    + '<circle cx="16" cy="50" r="3"/><circle cx="26" cy="55" r="3"/><circle cx="36" cy="50" r="3"/></g>';
+  var blitz = '<path d="M27 45l-9 12h7l-3 10 12-14h-8l4-8z" fill="var(--blitz)"/>';
+
+  function svg(inhalt){
+    return '<svg viewBox="0 0 56 62" xmlns="http://www.w3.org/2000/svg" role="img">' + inhalt + '</svg>';
+  }
+
+  function ikone(code){
+    var g = gruppe(code);
+    if(g === "klar"){
+      return svg(code === 1 ? sonne + wolke("var(--wolke)") : sonne);
+    }
+    if(g === "wolkig"){
+      return svg(code === 2 ? sonneKlein + wolke("var(--wolke)") : wolke("var(--wolke-dunkel)"));
+    }
+    if(g === "nebel"){
+      return svg(wolke("var(--wolke)")
+        + '<g stroke="var(--wolke-dunkel)" stroke-width="3" stroke-linecap="round">'
+        + '<line x1="12" y1="49" x2="40" y2="49"/><line x1="17" y1="56" x2="36" y2="56"/></g>');
+    }
+    if(g === "regen"){ return svg(wolke("var(--wolke-dunkel)") + tropfen); }
+    if(g === "schnee"){ return svg(wolke("var(--wolke)") + flocken); }
+    return svg(wolke("var(--wolke-dunkel)") + blitz);
+  }
+
+  var liste = document.getElementById("liste");
+  var status = document.getElementById("status");
+  var jetztFeld = document.getElementById("jetzt");
+  var aktuell = document.getElementById("aktuell");
+
+  function zweistellig(n){ return (n < 10 ? "0" : "") + n; }
+  function uhrzeit(d){ return zweistellig(d.getHours()) + ":" + zweistellig(d.getMinutes()); }
+  function lage(code){ return lagen[code] || "wechselhaft"; }
+
+  function hintergrund(code){
+    var g = gruppe(code);
+    document.body.className =
+      g === "klar" ? "klar" :
+      g === "schnee" ? "schnee" :
+      (g === "regen" || g === "gewitter") ? "nass" : "wolkig";
+  }
+
+  function laden(){
+    jetztFeld.textContent = uhrzeit(new Date()) + " Uhr";
+    var url = "https://api.open-meteo.com/v1/forecast"
+      + "?latitude=" + BREITE + "&longitude=" + LAENGE
+      + "&current=temperature_2m,weather_code,wind_speed_10m"
+      + "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max"
+      + "&timezone=Europe%2FZurich&forecast_days=4";
+
+    fetch(url).then(function(a){
+      if(!a.ok){ throw new Error("HTTP " + a.status); }
+      return a.json();
+    }).then(function(d){
+      var code = d.current.weather_code;
+      hintergrund(code);
+      document.getElementById("ikone").innerHTML = ikone(code);
+      document.getElementById("grad").textContent = Math.round(d.current.temperature_2m) + "°";
+      document.getElementById("lage").innerHTML = lage(code)
+        + "<span>Wind " + Math.round(d.current.wind_speed_10m) + " km/h</span>";
+      aktuell.style.display = "";
+
+      liste.innerHTML = "";
+      for(var i = 1; i < d.daily.time.length; i++){
+        var datum = new Date(d.daily.time[i] + "T12:00:00");
+        var eintrag = document.createElement("li");
+
+        var tag = document.createElement("span");
+        tag.className = "tag";
+        tag.textContent = wochentage[datum.getDay()] + " " + datum.getDate() + ".";
+
+        var bild = document.createElement("span");
+        bild.innerHTML = ikone(d.daily.weather_code[i]);
+        bild.style.display = "flex";
+
+        var beschrieb = document.createElement("span");
+        beschrieb.className = "beschrieb";
+        var regen = d.daily.precipitation_probability_max[i];
+        beschrieb.textContent = lage(d.daily.weather_code[i])
+          + (regen != null && regen >= 20 ? ", " + regen + "%" : "");
+
+        var werte = document.createElement("span");
+        werte.className = "werte";
+        werte.innerHTML = Math.round(d.daily.temperature_2m_min[i]) + "° <b>"
+          + Math.round(d.daily.temperature_2m_max[i]) + "°</b>";
+
+        eintrag.appendChild(tag);
+        eintrag.appendChild(bild);
+        eintrag.appendChild(beschrieb);
+        eintrag.appendChild(werte);
+        liste.appendChild(eintrag);
+      }
+      status.style.display = "none";
+    }).catch(function(){
+      aktuell.style.display = "none";
+      liste.innerHTML = "";
+      status.style.display = "";
+      status.textContent = "Wetterdaten nicht abrufbar.";
+    });
+  }
+
+  laden();
+  setInterval(laden, 600000);
+})();
+</script>
+
+</body>
+</html>
