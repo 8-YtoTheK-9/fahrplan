@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fahrplan-Widget im iframe</title>
+</head>
+<body style="margin:0">
+
+<iframe title="Naechste Busse Vaduz Post nach Mauren Vogelparadies"
+        style="border:0;width:100%;height:430px"
+        srcdoc="&lt;!DOCTYPE html&gt;
+&lt;html lang=&quot;de&quot;&gt;
+&lt;head&gt;
+&lt;meta charset=&quot;utf-8&quot;&gt;
+&lt;meta name=&quot;viewport&quot; content=&quot;width=device-width, initial-scale=1&quot;&gt;
+&lt;title&gt;Nächste Busse: Vaduz Post nach Mauren Vogelparadies&lt;/title&gt;
+&lt;style&gt;
+  :root{
+    --gruen:#0f5a3c;
+    --gruen-hell:#e8f2ec;
+    --gelb:#f4f7cc;
+    --text:#1c2321;
+    --grau:#6b7772;
+    --linie:#d9e2dd;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    padding:16px;
+    font-family:&quot;Helvetica Neue&quot;,Helvetica,Arial,sans-serif;
+    color:var(--text);
+    background:#fff;
+  }
+  header{
+    display:flex;
+    flex-wrap:wrap;
+    align-items:baseline;
+    gap:8px;
+    padding-bottom:10px;
+    border-bottom:2px solid var(--gruen);
+  }
+  h1{
+    font-size:17px;
+    line-height:1.3;
+    font-weight:700;
+    margin:0;
+  }
+  .jetzt{
+    margin-left:auto;
+    font-size:13px;
+    color:var(--grau);
+    font-variant-numeric:tabular-nums;
+  }
+  ul{list-style:none;margin:0;padding:0}
+  li{
+    display:grid;
+    grid-template-columns:auto 1fr auto;
+    gap:4px 14px;
+    align-items:center;
+    padding:12px 0;
+    border-bottom:1px solid var(--linie);
+  }
+  .zeit{
+    font-size:22px;
+    font-weight:700;
+    font-variant-numeric:tabular-nums;
+  }
+  .verspaetung{
+    color:#b4381f;
+    font-size:13px;
+    font-weight:700;
+    margin-left:4px;
+  }
+  .mitte{font-size:13px;color:var(--grau);line-height:1.5}
+  .linie{
+    display:inline-block;
+    background:var(--gruen);
+    color:#fff;
+    border-radius:3px;
+    padding:1px 7px;
+    font-weight:700;
+    margin-right:6px;
+  }
+  .abfahrt-in{
+    font-size:14px;
+    font-weight:700;
+    color:var(--gruen);
+    white-space:nowrap;
+    font-variant-numeric:tabular-nums;
+  }
+  .hinweis{
+    padding:14px 0;
+    font-size:14px;
+    color:var(--grau);
+  }
+  .hinweis a{color:var(--gruen)}
+  footer{
+    padding-top:10px;
+    font-size:12px;
+    color:var(--grau);
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+    align-items:center;
+  }
+  footer a{color:var(--gruen)}
+  button{
+    font:inherit;
+    font-size:12px;
+    border:1px solid var(--linie);
+    background:var(--gelb);
+    border-radius:4px;
+    padding:4px 10px;
+    cursor:pointer;
+  }
+  button:focus-visible, a:focus-visible{outline:2px solid var(--gruen);outline-offset:2px}
+&lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+
+&lt;header&gt;
+  &lt;h1&gt;Vaduz Post → Mauren Vogelparadies&lt;/h1&gt;
+  &lt;span class=&quot;jetzt&quot; id=&quot;jetzt&quot;&gt;&lt;/span&gt;
+&lt;/header&gt;
+
+&lt;ul id=&quot;liste&quot;&gt;&lt;/ul&gt;
+&lt;div class=&quot;hinweis&quot; id=&quot;status&quot;&gt;Verbindungen werden geladen.&lt;/div&gt;
+
+&lt;footer&gt;
+  &lt;button id=&quot;aktualisieren&quot; type=&quot;button&quot;&gt;Aktualisieren&lt;/button&gt;
+  &lt;span&gt;Daten: transport.opendata.ch (SBB-Fahrplan, inkl. LIEmobil)&lt;/span&gt;
+  &lt;a href=&quot;https://liemobil.li/de/fahrplan#fahrplanabfrage&quot; target=&quot;_blank&quot; rel=&quot;noopener&quot;&gt;Fahrplan LIEmobil&lt;/a&gt;
+&lt;/footer&gt;
+
+&lt;script&gt;
+(function(){
+  var VON = &quot;Vaduz, Post&quot;;
+  var NACH_VARIANTEN = [&quot;Mauren FL, Vogelparadies&quot;, &quot;Mauren, Vogelparadies&quot;, &quot;Vogelparadies&quot;];
+  var ANZAHL = 4;
+
+  var liste = document.getElementById(&quot;liste&quot;);
+  var status = document.getElementById(&quot;status&quot;);
+  var jetztFeld = document.getElementById(&quot;jetzt&quot;);
+
+  function zweistellig(n){ return (n &lt; 10 ? &quot;0&quot; : &quot;&quot;) + n; }
+
+  function uhrzeit(datum){
+    return zweistellig(datum.getHours()) + &quot;:&quot; + zweistellig(datum.getMinutes());
+  }
+
+  function jetztAnzeigen(){
+    jetztFeld.textContent = &quot;Stand &quot; + uhrzeit(new Date()) + &quot; Uhr&quot;;
+  }
+
+  function minutenBis(datum){
+    return Math.round((datum.getTime() - Date.now()) / 60000);
+  }
+
+  function holen(ziel){
+    var url = &quot;https://transport.opendata.ch/v1/connections&quot;
+      + &quot;?from=&quot; + encodeURIComponent(VON)
+      + &quot;&amp;to=&quot; + encodeURIComponent(ziel)
+      + &quot;&amp;limit=&quot; + ANZAHL;
+    return fetch(url).then(function(antwort){
+      if(!antwort.ok){ throw new Error(&quot;HTTP &quot; + antwort.status); }
+      return antwort.json();
+    });
+  }
+
+  function holenMitVarianten(index){
+    index = index || 0;
+    if(index &gt;= NACH_VARIANTEN.length){
+      return Promise.resolve({connections: []});
+    }
+    return holen(NACH_VARIANTEN[index]).then(function(daten){
+      if(daten.connections &amp;&amp; daten.connections.length){ return daten; }
+      return holenMitVarianten(index + 1);
+    });
+  }
+
+  function zeichnen(verbindungen){
+    liste.innerHTML = &quot;&quot;;
+    verbindungen.forEach(function(v){
+      var ab = new Date(v.from.departure);
+      var an = new Date(v.to.arrival);
+      var verspaetung = v.from.delay;
+      var abschnitt = (v.sections || []).find(function(s){ return s.journey; });
+      var linie = abschnitt &amp;&amp; abschnitt.journey ? (abschnitt.journey.number || abschnitt.journey.category || &quot;Bus&quot;) : &quot;Bus&quot;;
+      var umstiege = v.transfers || 0;
+      var minuten = minutenBis(ab);
+
+      var eintrag = document.createElement(&quot;li&quot;);
+
+      var zeit = document.createElement(&quot;div&quot;);
+      zeit.className = &quot;zeit&quot;;
+      zeit.textContent = uhrzeit(ab);
+      if(verspaetung){
+        var v2 = document.createElement(&quot;span&quot;);
+        v2.className = &quot;verspaetung&quot;;
+        v2.textContent = &quot;+&quot; + verspaetung;
+        zeit.appendChild(v2);
+      }
+
+      var mitte = document.createElement(&quot;div&quot;);
+      mitte.className = &quot;mitte&quot;;
+      var badge = document.createElement(&quot;span&quot;);
+      badge.className = &quot;linie&quot;;
+      badge.textContent = linie;
+      mitte.appendChild(badge);
+      mitte.appendChild(document.createTextNode(
+        &quot;an &quot; + uhrzeit(an) + &quot; Uhr&quot;
+        + (umstiege ? &quot;, &quot; + umstiege + &quot; Umstieg&quot; + (umstiege &gt; 1 ? &quot;e&quot; : &quot;&quot;) : &quot;, direkt&quot;)
+      ));
+
+      var rest = document.createElement(&quot;div&quot;);
+      rest.className = &quot;abfahrt-in&quot;;
+      rest.textContent = minuten &lt;= 0 ? &quot;jetzt&quot; : &quot;in &quot; + minuten + &quot; Min.&quot;;
+
+      eintrag.appendChild(zeit);
+      eintrag.appendChild(mitte);
+      eintrag.appendChild(rest);
+      liste.appendChild(eintrag);
+    });
+  }
+
+  function laden(){
+    jetztAnzeigen();
+    status.textContent = &quot;Verbindungen werden geladen.&quot;;
+    holenMitVarianten().then(function(daten){
+      var verbindungen = (daten.connections || []).filter(function(v){
+        return minutenBis(new Date(v.from.departure)) &gt;= 0;
+      });
+      if(!verbindungen.length){
+        liste.innerHTML = &quot;&quot;;
+        status.textContent = &quot;Momentan keine Verbindung gefunden. Bitte den Fahrplan von LIEmobil öffnen.&quot;;
+        return;
+      }
+      zeichnen(verbindungen);
+      status.textContent = &quot;&quot;;
+    }).catch(function(fehler){
+      liste.innerHTML = &quot;&quot;;
+      status.innerHTML = &#x27;Fahrplandaten sind gerade nicht abrufbar (&#x27; + fehler.message
+        + &#x27;). &lt;a href=&quot;https://liemobil.li/de/fahrplan#fahrplanabfrage&quot; target=&quot;_blank&quot; rel=&quot;noopener&quot;&gt;Fahrplan bei LIEmobil öffnen&lt;/a&gt;.&#x27;;
+    });
+  }
+
+  document.getElementById(&quot;aktualisieren&quot;).addEventListener(&quot;click&quot;, laden);
+  laden();
+  setInterval(laden, 60000);
+})();
+&lt;/script&gt;
+
+&lt;/body&gt;
+&lt;/html&gt;
+"></iframe>
+
+</body>
+</html>
