@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wetter Vaduz</title>
+<style>
+  :root{
+    --blau:#1b4f72;
+    --text:#1c2321;
+    --grau:#6b7772;
+    --linie:#dde3e8;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;overflow:hidden}
+  body{
+    margin:0;
+    padding:clamp(8px,2vh,16px) clamp(10px,2vw,18px);
+    font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;
+    color:var(--text);
+    background:#fff;
+    display:flex;
+    flex-direction:column;
+  }
+  header{
+    display:flex;
+    align-items:baseline;
+    gap:8px;
+    padding-bottom:clamp(4px,1vh,8px);
+    border-bottom:2px solid var(--blau);
+    flex:0 0 auto;
+  }
+  h1{font-size:clamp(13px,3.2vh,17px);margin:0;font-weight:700}
+  .jetzt{
+    margin-left:auto;
+    font-size:clamp(11px,2.2vh,13px);
+    color:var(--grau);
+    white-space:nowrap;
+    font-variant-numeric:tabular-nums;
+  }
+  .aktuell{
+    display:flex;
+    align-items:center;
+    gap:clamp(8px,2vw,16px);
+    padding:clamp(4px,1.4vh,12px) 0;
+    border-bottom:1px solid var(--linie);
+    flex:0 0 auto;
+  }
+  .grad{
+    font-size:clamp(22px,6.5vh,40px);
+    font-weight:700;
+    line-height:1;
+    font-variant-numeric:tabular-nums;
+  }
+  .lage{font-size:clamp(12px,2.6vh,16px);line-height:1.4}
+  .lage span{display:block;color:var(--grau);font-size:0.85em}
+  ul{
+    list-style:none;
+    margin:0;
+    padding:0;
+    flex:1 1 auto;
+    display:flex;
+    flex-direction:column;
+    justify-content:space-evenly;
+    min-height:0;
+    overflow:hidden;
+  }
+  li{
+    display:flex;
+    align-items:baseline;
+    gap:clamp(6px,1.5vw,14px);
+    font-size:clamp(11px,2.6vh,15px);
+    padding:clamp(1px,0.6vh,6px) 0;
+  }
+  .tag{font-weight:700;min-width:3.2em}
+  .beschrieb{color:var(--grau);flex:1 1 auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .werte{white-space:nowrap;font-variant-numeric:tabular-nums}
+  .werte b{color:var(--blau)}
+  .hinweis{font-size:clamp(11px,2.4vh,14px);color:var(--grau);padding:6px 0}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Wetter Vaduz</h1>
+  <span class="jetzt" id="jetzt"></span>
+</header>
+
+<div class="aktuell" id="aktuell" style="display:none">
+  <span class="grad" id="grad"></span>
+  <span class="lage" id="lage"></span>
+</div>
+
+<ul id="liste"></ul>
+<div class="hinweis" id="status">Wetterdaten werden geladen.</div>
+
+<script>
+(function(){
+  var BREITE = 47.141;
+  var LAENGE = 9.521;
+
+  var lagen = {
+    0:"klar", 1:"vorwiegend sonnig", 2:"teils bewölkt", 3:"bedeckt",
+    45:"Nebel", 48:"gefrierender Nebel",
+    51:"leichter Nieselregen", 53:"Nieselregen", 55:"starker Nieselregen",
+    56:"gefrierender Niesel", 57:"gefrierender Niesel",
+    61:"leichter Regen", 63:"Regen", 65:"starker Regen",
+    66:"gefrierender Regen", 67:"gefrierender Regen",
+    71:"leichter Schneefall", 73:"Schneefall", 75:"starker Schneefall",
+    77:"Schneegriesel",
+    80:"Regenschauer", 81:"Regenschauer", 82:"kräftige Schauer",
+    85:"Schneeschauer", 86:"Schneeschauer",
+    95:"Gewitter", 96:"Gewitter mit Hagel", 99:"Gewitter mit Hagel"
+  };
+  var wochentage = ["So","Mo","Di","Mi","Do","Fr","Sa"];
+
+  var liste = document.getElementById("liste");
+  var status = document.getElementById("status");
+  var jetztFeld = document.getElementById("jetzt");
+  var aktuell = document.getElementById("aktuell");
+
+  function zweistellig(n){ return (n < 10 ? "0" : "") + n; }
+  function uhrzeit(d){ return zweistellig(d.getHours()) + ":" + zweistellig(d.getMinutes()); }
+  function lage(code){ return lagen[code] || "wechselhaft"; }
+
+  function laden(){
+    jetztFeld.textContent = uhrzeit(new Date()) + " Uhr";
+    var url = "https://api.open-meteo.com/v1/forecast"
+      + "?latitude=" + BREITE + "&longitude=" + LAENGE
+      + "&current=temperature_2m,weather_code,wind_speed_10m"
+      + "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max"
+      + "&timezone=Europe%2FZurich&forecast_days=4";
+
+    fetch(url).then(function(a){
+      if(!a.ok){ throw new Error("HTTP " + a.status); }
+      return a.json();
+    }).then(function(d){
+      document.getElementById("grad").textContent = Math.round(d.current.temperature_2m) + "°";
+      document.getElementById("lage").innerHTML = lage(d.current.weather_code)
+        + "<span>Wind " + Math.round(d.current.wind_speed_10m) + " km/h</span>";
+      aktuell.style.display = "";
+
+      liste.innerHTML = "";
+      for(var i = 1; i < d.daily.time.length; i++){
+        var datum = new Date(d.daily.time[i] + "T12:00:00");
+        var eintrag = document.createElement("li");
+
+        var tag = document.createElement("span");
+        tag.className = "tag";
+        tag.textContent = wochentage[datum.getDay()] + " " + datum.getDate() + ".";
+
+        var beschrieb = document.createElement("span");
+        beschrieb.className = "beschrieb";
+        var regen = d.daily.precipitation_probability_max[i];
+        beschrieb.textContent = lage(d.daily.weather_code[i])
+          + (regen != null && regen >= 20 ? ", " + regen + "% Regen" : "");
+
+        var werte = document.createElement("span");
+        werte.className = "werte";
+        werte.innerHTML = Math.round(d.daily.temperature_2m_min[i]) + "° / <b>"
+          + Math.round(d.daily.temperature_2m_max[i]) + "°</b>";
+
+        eintrag.appendChild(tag);
+        eintrag.appendChild(beschrieb);
+        eintrag.appendChild(werte);
+        liste.appendChild(eintrag);
+      }
+      status.style.display = "none";
+    }).catch(function(){
+      aktuell.style.display = "none";
+      liste.innerHTML = "";
+      status.style.display = "";
+      status.innerHTML = 'Wetterdaten nicht abrufbar.';
+    });
+  }
+
+  laden();
+  setInterval(laden, 600000);
+})();
+</script>
+
+</body>
+</html>
